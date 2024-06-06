@@ -1,0 +1,5 @@
+project_id  = "reliable-sight-425106-c5"
+region      = "us-central1"
+cluster_name = "my-gke-cluster"
+bucket_name          = "gke-terraform"
+service_account_email = "gke-deployment@reliable-sight-425106-c5.iam.gserviceaccount.com"

@@ -1,0 +1,14 @@
+# destination-rule.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: app-destination
+spec:
+  host: app-service
+  subsets:
+  - name: stable
+    labels:
+      app: stable-app
+  - name: canary
+    labels:
+      app: canary-app

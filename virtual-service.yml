@@ -1,0 +1,20 @@
+# virtual-service.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: app-virtual-service
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - istio-system/istio-ingressgateway
+  http:
+  - route:
+    - destination:
+        host: app-service
+        subset: stable
+      weight: 80
+    - destination:
+        host: app-service
+        subset: canary
+      weight: 20

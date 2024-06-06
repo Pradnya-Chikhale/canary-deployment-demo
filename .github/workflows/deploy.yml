@@ -1,0 +1,227 @@
+name: Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  setup-bucket:
+    name: Set up GCS Bucket
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Google Cloud Auth
+      uses: google-github-actions/auth@v0.4.1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Setup gcloud CLI
+      uses: google-github-actions/setup-gcloud@v0.2.0
+      with:
+        project_id: ${{ secrets.GCP_PROJECT }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Check if the GCS Bucket already Exists in the GCP Console
+      id: check_bucket
+      env:
+        GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+      run: |
+        if gsutil ls -b gs://$GCS_BUCKET_NAME > /dev/null 2>&1; then
+          echo "bucket_exists=true" >> $GITHUB_ENV
+        else
+          echo "bucket_exists=false" >> $GITHUB_ENV
+        fi
+
+    - name: Create GCS Bucket
+      if: env.bucket_exists == 'false'
+      env:
+        GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+        GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+      run: |
+        echo 'Creating GCS bucket...'
+        gsutil mb -p $GCP_PROJECT -c standard -l us-central1 gs://$GCS_BUCKET_NAME
+
+    - name: Set Bucket Permissions
+      env:
+        GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+        SERVICE_ACCOUNT_EMAIL: ${{ secrets.SERVICE_ACCOUNT_EMAIL }}
+      run: |
+        echo 'Setting GCS bucket permissions...'
+        gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:roles/storage.objectViewer gs://$GCS_BUCKET_NAME
+        gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_EMAIL:roles/storage.admin gs://$GCS_BUCKET_NAME
+
+  terraform:
+    name: Set up GKE with Terraform
+    runs-on: ubuntu-latest
+    needs: setup-bucket
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: 1.0.0
+
+    - name: Google Cloud Auth
+      uses: google-github-actions/auth@v0.4.1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Setup gcloud CLI
+      uses: google-github-actions/setup-gcloud@v0.2.0
+      with:
+        project_id: ${{ secrets.GCP_PROJECT }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Initialize Terraform
+      working-directory: ./terraform
+      run: terraform init
+
+    - name: Apply Terraform
+      working-directory: ./terraform
+      run: terraform apply -auto-approve
+
+  build:
+    needs: terraform
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Log in to Google Cloud Container Registry
+      uses: google-github-actions/auth@v0.4.1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Configure docker to use the gcloud command-line tool as a credential helper
+      run: |
+        gcloud --quiet auth configure-docker
+
+    - name: Build and push Docker image (stable)
+      run: |
+         docker build --build-arg APP_VERSION=stable -t gcr.io/${{ secrets.GCP_PROJECT }}/stable-app:latest .
+         docker push gcr.io/${{ secrets.GCP_PROJECT }}/stable-app:latest
+
+
+    - name: Build and push Docker image (canary)
+      run: |
+        docker build --build-arg APP_VERSION=canary -t gcr.io/${{ secrets.GCP_PROJECT }}/canary-app:latest .
+        docker push gcr.io/${{ secrets.GCP_PROJECT }}/canary-app:latest
+
+  install-istio:
+    name: Install Istio
+    runs-on: ubuntu-latest
+    needs: terraform
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Authenticate with gcloud
+      uses: google-github-actions/auth@v0.4.1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Kubernetes tools
+      uses: azure/setup-kubectl@v1
+
+    - name: Authenticate to GKE
+      uses: google-github-actions/auth@v0.4.1 
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+    
+    - name: Install gke-gcloud-auth-plugin
+      run: |
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+        sudo apt update
+        sudo apt-get install google-cloud-sdk-gke-gcloud-auth-plugin kubectl
+        export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+        gcloud container clusters get-credentials my-gke-cluster --region us-central1
+
+    - name: Set environment variables and authenticate with GKE
+      run: |
+        export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+        gcloud container clusters get-credentials my-gke-cluster --region us-central1 --project ${{ secrets.GCP_PROJECT }}
+
+    - name: Install Istio
+      run: |
+        curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.15.1 sh -
+        export PATH=$PWD/istio-1.15.1/bin:$PATH
+        istioctl install --set profile=demo -y
+        kubectl label namespace default istio-injection=enabled
+
+
+  
+  deploy:
+    needs: [build,install-istio]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Authenticate with gcloud
+      uses: google-github-actions/auth@v2
+      with:     
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT }}
+        service_account: 'github-actions@vital-petal-409810.iam.gserviceaccount.com'
+     
+
+    - name: Set up Kubernetes tools
+      uses: azure/setup-kubectl@v1
+
+    - name: Authenticate to GKE
+      uses: google-github-actions/auth@v0.4.1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Get GKE credentials
+      run: gcloud container clusters get-credentials my-gke-cluster --region us-central1 --project ${{ secrets.GCP_PROJECT }}
+
+    - name: Install gke-gcloud-auth-plugin
+      run: |
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+        sudo apt update
+        sudo apt-get install google-cloud-sdk-gke-gcloud-auth-plugin kubectl
+        export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+        gcloud container clusters get-credentials my-gke-cluster --region us-central1
+
+    - name: Set environment variables and authenticate with GKE
+      run: |
+        
+        export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+        
+        gcloud container clusters get-credentials my-gke-cluster --region us-central1 --project reliable-sight-425106-c5
+
+  
+    
+    - name: Deploy to GKE
+      env:
+           GOOGLE_PROJECT: ${{ secrets.GCP_PROJECT }}
+      run: |
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+        sudo apt update
+        sudo apt-get install google-cloud-sdk-gke-gcloud-auth-plugin kubectl
+        export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+        gcloud container clusters get-credentials my-gke-cluster --region us-central1
+        kubectl apply -f stable-deployment.yaml
+        kubectl apply -f canary-deployment.yaml
+        kubectl apply -f app-service.yaml
+        kubectl apply -f destination-rule.yaml
+        kubectl apply -f virtual-service.yaml
+
+    
