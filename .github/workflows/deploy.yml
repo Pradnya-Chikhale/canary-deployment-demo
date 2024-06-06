@@ -218,10 +218,10 @@ jobs:
         sudo apt-get install google-cloud-sdk-gke-gcloud-auth-plugin kubectl
         export USE_GKE_GCLOUD_AUTH_PLUGIN=True
         gcloud container clusters get-credentials my-gke-cluster --region us-central1
-        kubectl apply -f stable-deployment.yaml
-        kubectl apply -f canary-deployment.yaml
-        kubectl apply -f app-service.yaml
-        kubectl apply -f destination-rule.yaml
-        kubectl apply -f virtual-service.yaml
+        kubectl apply -f stable-deployment.yml
+        kubectl apply -f canary-deployment.yml
+        kubectl apply -f service.yml
+        kubectl apply -f destination-rule.yml
+        kubectl apply -f virtual-service.yml
 
     
