@@ -9,5 +9,6 @@ RUN pip install -r requirements.txt
 
 COPY ${APP_VERSION}/app.py app.py
 COPY ${APP_VERSION}/templates /app/templates
+COPY ${APP_VERSION}/templates/form.html /app/templates/form.html
 
 CMD ["python", "app.py"]
