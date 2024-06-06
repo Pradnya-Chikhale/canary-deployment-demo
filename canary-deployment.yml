@@ -4,7 +4,7 @@ kind: Deployment
 metadata:
   name: canary-app
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: canary-app
