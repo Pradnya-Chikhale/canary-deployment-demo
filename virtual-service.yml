@@ -13,8 +13,8 @@ spec:
     - destination:
         host: app-service
         subset: stable
-      weight: 80
+      weight: 50
     - destination:
         host: app-service
         subset: canary
-      weight: 20
+      weight: 50
