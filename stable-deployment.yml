@@ -7,11 +7,13 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      app: stable-app
+      app: app
+      version: stable
   template:
     metadata:
       labels:
-        app: stable-app
+        app: app
+        version: stable
     spec:
       containers:
       - name: stable-app
