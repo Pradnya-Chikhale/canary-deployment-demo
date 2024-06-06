@@ -13,7 +13,7 @@ spec:
     metadata:
       labels:
         app: app
-      version: canary
+        version: canary
     spec:
       containers:
       - name: canary-app

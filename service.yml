@@ -1,10 +1,11 @@
+# app-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: app-service
 spec:
   selector:
-    app: app
+    app: stable-app
   ports:
     - protocol: TCP
       port: 80
