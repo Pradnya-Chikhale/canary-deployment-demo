@@ -64,7 +64,6 @@ jobs:
          docker build --build-arg APP_VERSION=stable -t gcr.io/${{ secrets.GCP_PROJECT }}/stable-app:latest .
          docker push gcr.io/${{ secrets.GCP_PROJECT }}/stable-app:latest
 
-
     - name: Build and push Docker image (canary)
       run: |
         docker build --build-arg APP_VERSION=canary -t gcr.io/${{ secrets.GCP_PROJECT }}/canary-app:latest .
@@ -158,8 +157,6 @@ jobs:
         
         gcloud container clusters get-credentials my-gke-cluster --region us-central1 --project reliable-sight-425106-c5
 
-  
-    
     - name: Deploy to GKE
       env:
            GOOGLE_PROJECT: ${{ secrets.GCP_PROJECT }}
