@@ -10,7 +10,6 @@ jobs:
   terraform:
     name: Set up GKE with Terraform
     runs-on: ubuntu-latest
-    needs: setup-bucket
 
     steps:
     - name: Checkout code
