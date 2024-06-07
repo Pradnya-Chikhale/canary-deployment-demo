@@ -1,6 +1,6 @@
 # app.py (Stable)
 from flask import Flask, jsonify, request, render_template
-
+#comments for the demo
 app = Flask(__name__)
 
 # Route for the homepage
